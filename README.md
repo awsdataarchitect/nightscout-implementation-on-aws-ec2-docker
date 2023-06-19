@@ -1,13 +1,12 @@
 # CloudFormation Template
 
-AWS CloudFormation Template for end-to-end solution to extract valuable insights in real-time from home security camera feeds
+AWS CloudFormation Template for deploying Open-Source Nightscout (CGM in the Cloud) Solution with Docker on EC2 
 
-https://github.com/awsdataarchitect/real-time-cam-feed-extraction-lambda-rekognition-dynamodb/blob/main/realtime-extraction-analysis.yaml
+https://github.com/awsdataarchitect/nightscout-implementation-on-aws-ec2-docker/blob/main/nightscout-ec-docker.yaml
 
-Read the accompanying Blog on the Integration of this template with IFTTT
+Read the accompanying Blog on the end to end deployment
 
-https://vivek-aws.medium.com/real-time-image-extraction-and-processing-from-security-cameras-using-aws-rekognition-and-lambda-ee1769af453f
-
+https://vivek-aws.medium.com/deploying-nightscout-on-aws-a-cost-effective-solution-for-diabetes-management-3084e0a0a85f
 
 
 

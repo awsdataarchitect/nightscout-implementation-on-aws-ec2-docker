@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  AMI:
+    Type: String
+    Description: The ID of the Amazon Machine Image (AMI) to use for the EC2 instance
+    Default: ami-08fc6fb8ad2e794bb  # Default AMI ID for Amazon Linux 2023 (HVM), SSD Volume Type (64-bit arm)
+  InstanceType:
+    Type: String
+    Description: The instance type for the EC2 instance
+    Default: t4g.small
+  APISecret:
+    Type: String
+    Description: The API secret for Nightscout container
+    Default: 
+  Enable:
+    Type: String
+    Description: List of Nightscout features to enable
+    Default: careportal basal iob cob bridge
+  BridgeUsername:
+    Type: String
+    Description: The username for the Nightscout bridge
+    Default: 
+  BridgePassword:
+    Type: String
+    Description: The password for the Nightscout bridge
+    Default: 
+  BridgeServer:
+    Type: String
+    Description: The server for the Nightscout bridge
+    Default: EU
+  MongoConnection:
+    Type: String
+    Description: The connection string for MongoDb
+    Default: 
+  KeyPair:
+    Type: String
+    Description: The key pair for the EC2 instance
+    Default: 
+Resources:
+  MyElasticIP:
+    Type: AWS::EC2::EIP
+
+  NightscoutInstance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      ImageId: !Ref AMI
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPair
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+
+          cat << 'EOF' > /home/ec2-user/docker-compose.yml
+          version: '3'
+          services:
+            nightscout:
+              image: nightscout/cgm-remote-monitor:latest
+              container_name: nightscout
+              environment:
+                - API_SECRET=${APISecret}
+                - INSECURE_USE_HTTP=true
+                - NODE_ENV=production
+                - TZ=Etc/UTC
+                - ENABLE=${Enable}
+                - BRIDGE_USER_NAME=${BridgeUsername}
+                - BRIDGE_PASSWORD=${BridgePassword}
+                - MONGO_CONNECTION=${MongoConnection}
+                - BRIDGE_SERVER=${BridgeServer}
+                - AUTH_DEFAULT_ROLES=denied
+                - DISPLAY_UNITS=mmol/L
+              labels:
+                - "traefik.enable=true"
+                - "traefik.http.routers.nightscout.rule=Host(`${MyElasticIP.PublicIp}`)"
+                - 'traefik.http.routers.nightscout.entrypoints=websecure'          
+                - 'traefik.http.routers.nightscout.tls.certresolver=le'  
+            traefik:
+              image: traefik:latest
+              container_name: traefik
+              volumes:
+                - './letsencrypt:/letsencrypt'
+                - /var/run/docker.sock:/var/run/docker.sock:ro
+              command:
+                - '--providers.docker=true'
+                - '--providers.docker.exposedbydefault=false'
+                - '--entrypoints.web.address=:80'
+                - '--entrypoints.web.http.redirections.entrypoint.to=websecure'
+                - '--entrypoints.websecure.address=:443'
+                - "--certificatesresolvers.le.acme.httpchallenge=true"
+                - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+                - '--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json'
+                - '--certificatesresolvers.le.acme.email=youremail@gmail.com'  
+              ports:
+                - "80:80"
+                - "443:443"
+          EOF
+          sudo yum update -y
+          sudo yum install docker -y
+          #sudo usermod -a -G docker ec2-user
+          #sudo chkconfig docker on
+          sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          systemctl enable docker
+          systemctl start docker
+
+          docker-compose -f /home/ec2-user/docker-compose.yml up -d
+    DependsOn: MyElasticIP
+  
+  ElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref NightscoutInstance
+      AllocationId: !GetAtt MyElasticIP.AllocationId
+
+Outputs:
+  NightscoutInstanceIP:
+    Value: !GetAtt NightscoutInstance.PublicIp
+    Description: Public IP address of the Nightscout instance
